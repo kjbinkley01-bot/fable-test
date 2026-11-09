@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Perihelion Orrery</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IM+Fell+English+SC&family=Spline+Sans+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one cyanotype star-plate fills the screen; an engraved caption above, the instrument's controls in a dock below. */
+:root {
+  color-scheme: dark;
+  --ink: #0a1f37;          /* deepest prussian, page ground */
+  --plate: #12345b;        /* plate centre */
+  --dock: #0d2644;         /* control dock ground */
+  --line: #e9e2cc;         /* ivory line work */
+  --line-dim: rgba(233, 226, 204, .30);
+  --line-faint: rgba(233, 226, 204, .13);
+  --text: #efe9d6;
+  --muted: rgba(239, 233, 214, .64);
+  --brass: #e8c36a;        /* the one accent */
+  --brass-wash: rgba(232, 195, 106, .12);
+  --display: "IM Fell English", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --caps: "IM Fell English SC", "IM Fell English", Georgia, serif;
+  --mono: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+html { box-sizing: border-box; height: 100%; }
+body {
+  height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none;
+  display: flex; flex-direction: column;
+  background: var(--ink); color: var(--text);
+  font-family: var(--mono); font-size: 12px; line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+.cap {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-block: 10px 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line-faint);
+}
+.cap-text { min-width: 0; }
+.cap h1 {
+  margin: 0; font-family: var(--display); font-style: italic; font-weight: 400;
+  font-size: clamp(22px, 3.4vw, 30px); line-height: 1.05; letter-spacing: .01em;
+}
+.cap .sub {
+  margin: 3px 0 0; font-family: var(--caps); font-size: 12px; letter-spacing: .13em; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cap-side { display: flex; align-items: center; gap: 14px; flex: none; }
+.status { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+@media (max-width: 720px) { .status { display: none; } }
+
+.btn {
+  height: 36px; padding: 0 14px; border: 1px solid var(--line-dim); border-radius: 2px;
+  background: transparent; cursor: pointer; white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.btn:hover { border-color: var(--line); }
+.btn.primary { background: var(--brass); border-color: var(--brass); color: var(--ink); font-weight: 500; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.primary[aria-pressed="true"] { background: var(--brass-wash); color: var(--brass); }
+
+.stage { position: relative; flex: 1; min-height: 0; }
+#sky { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.hint {
+  margin: 0; min-height: 1.35em; text-align: center; text-wrap: balance;
+  padding-block: 2px 9px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  font-family: var(--display); font-style: italic; font-size: 15px; line-height: 1.35; color: var(--muted);
+}
+@media (max-width: 720px) { .hint { font-size: 14px; } }
+
+.dock {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 22px;
+  padding-block: 10px 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-top: 1px solid var(--line-faint); background: var(--dock);
+}
+.grp { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.lab { font-family: var(--caps); font-size: 12px; letter-spacing: .14em; color: var(--muted); }
+.row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.chip {
+  display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 11px;
+  border: 1px solid var(--line-dim); border-radius: 2px; background: transparent; cursor: pointer;
+}
+.chip svg { width: 13px; height: 13px; flex: none; }
+.chip:hover { border-color: var(--line); }
+.chip[aria-pressed="true"] { border-color: var(--brass); color: var(--brass); background: var(--brass-wash); }
+select {
+  height: 36px; padding: 0 30px 0 10px; border: 1px solid var(--line-dim); border-radius: 2px;
+  background: var(--dock) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23e9e2cc' stroke-width='1.3'/%3E%3C/svg%3E") no-repeat right 10px center;
+  appearance: none; -webkit-appearance: none; cursor: pointer; max-width: 100%;
+}
+select:hover { border-color: var(--line); }
+.mass { display: flex; align-items: center; gap: 10px; height: 36px; }
+.mass input { width: 130px; accent-color: var(--brass); }
+.mass output { font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+@media (max-width: 720px) {
+  .dock { gap: 8px 14px; padding-block: 8px 10px; }
+  .chip { padding: 0 9px; }
+  .mass input { width: 104px; }
+}
+</style>
+</head>
+<body>
+<header class="cap">
+  <div class="cap-text">
+    <h1>Perihelion</h1>
+    <p class="sub">an orrery that sings &middot; after Kepler, 1619</p>
+  </div>
+  <div class="cap-side">
+    <p class="status" id="status" aria-live="polite"></p>
+    <button class="btn primary" id="listen" type="button" aria-pressed="false">Listen</button>
+  </div>
+</header>
+
+<main class="stage" id="stage">
+  <canvas id="sky" role="img" aria-label="A star plate. Worlds orbit a central star and sound a note each time they pass their closest point."></canvas>
+</main>
+<p class="hint" id="hint">Tap to set a world in orbit. Drag to fling it. Tap a world to remove it.</p>
+
+<section class="dock" aria-label="Instrument controls">
+  <div class="grp">
+    <span class="lab" id="labVoice">voice of the next world</span>
+    <div class="row" role="group" aria-labelledby="labVoice">
+      <button class="chip" type="button" data-voice="bell" id="vBell" aria-pressed="true"><svg viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5" fill="currentColor"/></svg>Bell</button>
+      <button class="chip" type="button" data-voice="pluck" id="vPluck" aria-pressed="false"><svg viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="6.5" cy="6.5" r="1.4" fill="currentColor"/></svg>Pluck</button>
+      <button class="chip" type="button" data-voice="breath" id="vBreath" aria-pressed="false"><svg viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5.6" fill="currentColor" opacity=".3"/><circle cx="6.5" cy="6.5" r="2.6" fill="currentColor"/></svg>Breath</button>
+      <button class="chip" type="button" data-voice="drum" id="vDrum" aria-pressed="false"><svg viewBox="0 0 13 13" aria-hidden="true"><circle cx="6.5" cy="6.5" r="3" fill="currentColor"/><ellipse cx="6.5" cy="6.5" rx="6" ry="2.2" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>Drum</button>
+    </div>
+  </div>
+  <div class="grp">
+    <label class="lab" for="scale">scale</label>
+    <select id="scale"></select>
+  </div>
+  <div class="grp">
+    <label class="lab" for="key">key</label>
+    <select id="key"></select>
+  </div>
+  <div class="grp">
+    <label class="lab" for="mass">star mass sets the tempo</label>
+    <div class="mass"><input type="range" id="mass" min="0.4" max="2.2" step="0.01" value="1"><output id="massOut" for="mass"></output></div>
+  </div>
+  <div class="grp">
+    <span class="lab" id="labLock">orbits</span>
+    <button class="chip" type="button" id="lock" aria-pressed="true" aria-labelledby="labLock lock">In resonance</button>
+  </div>
+  <div class="grp">
+    <label class="lab" for="system">system</label>
+    <div class="row">
+      <select id="system">
+        <option value="harmonices">Harmonices, a composed system</option>
+        <option value="trappist">TRAPPIST-1, true period ratios</option>
+        <option value="sol">Sol's inner worlds, true perihelia</option>
+        <option value="empty">An empty sky</option>
+      </select>
+      <button class="btn" type="button" id="genesis">Genesis</button>
+      <button class="btn" type="button" id="undo">Undo</button>
+    </div>
+  </div>
+</section>
+
+<script>
+(() => {
+'use strict';
+
+/* ───────────── constants ───────────── */
+const TAU = Math.PI * 2;
+const RINGS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16];           // resonant periods, in beats
+const RING_LABEL = { 1: '1', 1.5: '1½', 2: '2', 3: '3', 4: '4', 6: '6', 8: '8', 12: '12', 16: '16' };
+const T_MAX = 16;                                          // a = 1 (plate edge) orbits in 16 beats
+const MU = 4 * Math.PI * Math.PI / (T_MAX * T_MAX);        // Kepler III: T = T_MAX · a^1.5
+const SUN_R = 0.055;
+const RIM = 1.12;                                          // note rim sits just outside a = 1
+const BASE_BPM = 96;
+const GRID = 0.25;                                         // perihelion times snap to sixteenths
+const MAX_WORLDS = 32;
+const SCALES = {
+  penta:    { name: 'Major pentatonic', steps: [0, 2, 4, 7, 9] },
+  minpenta: { name: 'Minor pentatonic', steps: [0, 3, 5, 7, 10] },
+  hira:     { name: 'Hirajoshi',        steps: [0, 2, 3, 7, 8] },
+  whole:    { name: 'Whole tone',       steps: [0, 2, 4, 6, 8, 10] },
+  dorian:   { name: 'Dorian',           steps: [0, 2, 3, 5, 7, 9, 10] },
+  lydian:   { name: 'Lydian',           steps: [0, 2, 4, 6, 7, 9, 11] },
+};
+const NOTE_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'B'];
+const VOICES = ['bell', 'pluck', 'breath', 'drum'];
+const COL = [[242, 227, 179], [245, 169, 122], [238, 123, 139], [201, 155, 240], [127, 200, 242], [127, 224, 195], [217, 230, 138]];
+const IV = [233, 226, 204];
+const INK = [10, 31, 55];
+const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const STORE_KEY = 'perihelion.v1';
+
+const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const frac = v => v - Math.floor(v);
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+/* ───────────── state ───────────── */
+const S = { planets: [], scale: 'penta', root: 2, mass: 1, lock: true, voice: 'bell', system: 'harmonices' };
+let beatPos = 0, bps = BASE_BPM / 60, uid = 0;
+let events = [];      // ripples and plucked strings
+let bodies = [];      // comets and sun-divers, integrated numerically
+let sunFlash = 0;
+let gesture = null, hover = null, hintCount = 0;
+
+const $ = id => document.getElementById(id);
+const cv = $('sky'), ctx = cv.getContext('2d'), stage = $('stage');
+const plate = document.createElement('canvas'), pctx = plate.getContext('2d');
+let W = 0, H = 0, dpr = 1, cx = 0, cy = 0, R = 100, gs = 1;
+
+/* ───────────── music theory ───────────── */
+const steps = () => SCALES[S.scale].steps;
+const secW = () => TAU / steps().length;
+function degOf(angle) { const n = steps().length; return ((Math.round((angle + Math.PI / 2) / (TAU / n)) % n) + n) % n; }
+const degAngle = d => -Math.PI / 2 + d * secW();
+const octOf = T => clamp(Math.round(Math.log2(4 / T)), -2, 2);
+const baseMidi = () => (S.root <= 6 ? 60 : 48) + S.root;
+const midiOf = (deg, T) => baseMidi() + steps()[deg] + 12 * octOf(T);
+const noteName = m => NOTE_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+const fmtBeats = T => RING_LABEL[T] || (Math.round(T * 100) / 100).toString();
+
+/* ───────────── celestial mechanics ───────────── */
+const aFromT = T => Math.pow(T / T_MAX, 2 / 3);
+const TFromA = a => T_MAX * Math.pow(a, 1.5);
+function snapT(T) {
+  let best = RINGS[0], bd = Infinity;
+  for (const r of RINGS) { const d = Math.abs(Math.log(T / r)); if (d < bd) { bd = d; best = r; } }
+  return best;
+}
+function solveKepler(M, e) {                   // eccentric anomaly from mean anomaly
+  let E = e < 0.8 ? M : Math.PI;
+  for (let i = 0; i < 9; i++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+  return E;
+}
+function posAt(p, beat) {
+  let M = TAU * frac((beat - p.tp) / p.T);
+  if (p.dM) { M += p.dM * Math.exp(-Math.max(0, beat - p.born) * 3); M = TAU * frac(M / TAU); }
+  const E = solveKepler(M, p.e);
+  const x = p.a * (Math.cos(E) - p.e), y = p.a * Math.sqrt(1 - p.e * p.e) * Math.sin(E) * p.dir;
+  const c = Math.cos(p.w), s = Math.sin(p.w);
+  return [x * c - y * s, x * s + y * c];
+}
+function elements(x, y, vx, vy) {              // orbital elements from a state vector
+  const r = Math.hypot(x, y), v2 = vx * vx + vy * vy;
+  const energy = v2 / 2 - MU / r;
+  if (energy >= -1e-9) return null;            // unbound
+  const a = -MU / (2 * energy);
+  const h = x * vy - y * vx, rv = x * vx + y * vy;
+  const ex = ((v2 - MU / r) * x - rv * vx) / MU, ey = ((v2 - MU / r) * y - rv * vy) / MU;
+  const e = Math.min(Math.hypot(ex, ey), 0.97);
+  const dir = h >= 0 ? 1 : -1;
+  const w = e > 1e-3 ? Math.atan2(ey, ex) : Math.atan2(y, x);
+  let nu = dir * (Math.atan2(y, x) - w);
+  nu = Math.atan2(Math.sin(nu), Math.cos(nu));
+  const E = 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu / 2), Math.sqrt(1 + e) * Math.cos(nu / 2));
+  return { a, e, w, dir, M: E - e * Math.sin(E) };
+}
+
+/* What a gesture will make: an orbit, a comet, a sun-diver, or nothing. */
+function outcome(g) {
+  const x = (g.x0 - cx) / R, y = (g.y0 - cy) / R, r = Math.hypot(x, y);
+  if (r < SUN_R * 1.7) return { kind: g.moved ? 'none' : 'sun' };
+  if (!g.moved) {
+    const T = S.lock ? snapT(TFromA(clamp(r, 0.1, 1.1))) : clamp(TFromA(r), 0.75, 19);
+    return { kind: 'orbit', el: { a: aFromT(T), e: 0, w: Math.atan2(y, x), dir: -1, M: 0, T } };
+  }
+  const dx = (g.x - g.x0) / R, dy = (g.y - g.y0) / R, d = Math.hypot(dx, dy);
+  const speed = Math.sqrt(MU / r) * Math.min(d / 0.34, 1.75);
+  const vx = dx / d * speed, vy = dy / d * speed;
+  const el = elements(x, y, vx, vy);
+  if (!el || TFromA(el.a) > 26) return { kind: 'comet', x, y, vx, vy };
+  if (el.a * (1 - el.e) < SUN_R) return { kind: 'dive', x, y, vx, vy };
+  el.T = S.lock ? snapT(TFromA(el.a)) : clamp(TFromA(el.a), 0.75, 19);
+  el.a = aFromT(el.T);
+  el.e = Math.min(el.e, 1 - SUN_R * 1.2 / el.a);
+  return { kind: 'orbit', el };
+}
+
+function resetCounters(p) {
+  p.k = Math.ceil((beatPos + 0.02 - p.tp) / p.T);
+  p.ka = Math.ceil((beatPos + 0.02 - p.tp) / p.T - 0.5);
+}
+function addPlanet(el, voice, quiet) {
+  const p = { id: ++uid, a: el.a, e: el.e, w: el.w, dir: el.dir, T: el.T, voice, born: beatPos, bornAt: performance.now(), dM: 0, flash: -99 };
+  let tp = beatPos - (el.M / TAU) * el.T;
+  if (S.lock) { const q = Math.round(tp / GRID) * GRID; p.dM = TAU * (q - tp) / el.T; tp = q; }
+  p.tp = tp;
+  p.k = Math.ceil((beatPos + 0.15 - p.tp) / p.T);
+  p.ka = Math.ceil((beatPos + 0.15 - p.tp) / p.T - 0.5);
+  S.planets.push(p);
+  if (S.planets.length > MAX_WORLDS) S.planets.shift();
+  if (!quiet) {
+    const d = degOf(p.w), pos = posAt(p, beatPos);
+    playNote(voice, mtof(midiOf(d, p.T)), 0, 0.9, p.T / bps);
+    p.flash = beatPos;
+    events.push({ tb: beatPos, x: pos[0], y: pos[1], deg: d, vel: 1, str: null });
+  }
+  return p;
+}
+function removePlanet(p) {
+  const i = S.planets.indexOf(p); if (i < 0) return;
+  const pos = posAt(p, beatPos);
+  S.planets.splice(i, 1);
+  events.push({ tb: beatPos, x: pos[0], y: pos[1], deg: -1, vel: 0.8, str: null });
+  blip();
+}
+
+/* ───────────── audio ───────────── */
+let ac = null, master = null, bus = {}, delayNode = null, noiseBuf = null, soundOn = false;
+const audioLive = () => ac && soundOn && ac.state === 'running';
+
+function makeIR(seconds) {
+  const len = Math.floor(ac.sampleRate * seconds), buf = ac.createBuffer(2, len, ac.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch); let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / len;
+      lp += ((Math.random() * 2 - 1) - lp) * (0.55 - 0.4 * t);     // darkens as it decays
+      d[i] = lp * Math.pow(1 - t, 2.8) * (i < 400 ? i / 400 : 1);
+    }
+  }
+  return buf;
+}
+function initAudio() {
+  if (ac) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  ac = new AC();
+  master = ac.createGain(); master.gain.value = 0.85;
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.006; comp.release.value = 0.22;
+  master.connect(comp); comp.connect(ac.destination);
+
+  const rev = ac.createConvolver(); rev.buffer = makeIR(3.4);
+  const revIn = ac.createGain(), revOut = ac.createGain(); revOut.gain.value = 0.55;
+  revIn.connect(rev); rev.connect(revOut); revOut.connect(master);
+
+  delayNode = ac.createDelay(2.5); delayNode.delayTime.value = 0.75 / bps;
+  const fb = ac.createGain(); fb.gain.value = 0.36;
+  const dlp = ac.createBiquadFilter(); dlp.type = 'lowpass'; dlp.frequency.value = 2600;
+  const delIn = ac.createGain(), delOut = ac.createGain(); delOut.gain.value = 0.4;
+  delIn.connect(delayNode); delayNode.connect(dlp); dlp.connect(fb); fb.connect(delayNode);
+  dlp.connect(delOut); delOut.connect(master); delOut.connect(revIn);
+
+  const sends = { bell: [1, 0.6, 0.38], pluck: [1, 0.32, 0.3], breath: [1, 0.75, 0.1], drum: [1, 0.12, 0] };
+  for (const v of VOICES) {
+    const b = ac.createGain(); b.connect(master);
+    const r = ac.createGain(); r.gain.value = sends[v][1]; b.connect(r); r.connect(revIn);
+    const dl = ac.createGain(); dl.gain.value = sends[v][2]; b.connect(dl); dl.connect(delIn);
+    bus[v] = b;
+  }
+  noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+  const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+}
+function osc(type, f, t, stopAt) {
+  const o = ac.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.start(t); o.stop(stopAt); return o;
+}
+/* delay is seconds from now; holdSec is one orbital period, used by the sustained voice */
+function playNote(voice, f, delay, vel, holdSec) {
+  if (!audioLive()) return;
+  const t = ac.currentTime + Math.max(0, delay) + 0.012;
+  const lc = clamp(Math.pow(330 / f, 0.45), 0.35, 1.7);         // rough loudness compensation
+  const out = ac.createGain(); out.connect(bus[voice]);
+  if (voice === 'bell') {
+    const dur = clamp(1.9 * Math.pow(440 / f, 0.3), 0.9, 3.2), end = t + dur + 0.1;
+    const car = osc('sine', f, t, end), mod = osc('sine', f * 3.5, t, end), mg = ac.createGain();
+    mg.gain.setValueAtTime(f * 2.4 * vel, t); mg.gain.exponentialRampToValueAtTime(f * 0.04, t + dur * 0.6);
+    mod.connect(mg); mg.connect(car.frequency);
+    const sub = osc('sine', f * 2, t, end), sg = ac.createGain(); sg.gain.value = 0.18; sub.connect(sg); sg.connect(out);
+    car.connect(out);
+    out.gain.setValueAtTime(0.0001, t); out.gain.linearRampToValueAtTime(0.2 * vel * lc, t + 0.004);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  } else if (voice === 'pluck') {
+    const dur = clamp(1.1 * Math.pow(330 / f, 0.25), 0.6, 1.8), end = t + dur + 0.1;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 3;
+    lp.frequency.setValueAtTime(Math.min(f * (4 + 5 * vel), 9000), t);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(f * 1.1, 120), t + 0.4);
+    const o1 = osc('sawtooth', f, t, end), o2 = osc('triangle', f * 1.004, t, end);
+    o1.connect(lp); o2.connect(lp); lp.connect(out);
+    out.gain.setValueAtTime(0.0001, t); out.gain.linearRampToValueAtTime(0.19 * vel * lc, t + 0.003);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  } else if (voice === 'breath') {
+    const att = 0.38, hold = clamp((holdSec || 2) * 0.22, 0.35, 2.4), end = t + att + hold + 3.2;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = clamp(f * 8, 700, 2600);
+    const o1 = osc('sine', f, t, end), o2 = osc('sine', f * 1.006, t, end), o3 = osc('sawtooth', f * 2.003, t, end), o4 = osc('sine', f * 3, t, end);
+    const g3 = ac.createGain(); g3.gain.value = 0.2; const g4 = ac.createGain(); g4.gain.value = 0.14;
+    o1.connect(lp); o2.connect(lp); o3.connect(g3); g3.connect(lp); o4.connect(g4); g4.connect(lp); lp.connect(out);
+    out.gain.setValueAtTime(0.0001, t); out.gain.linearRampToValueAtTime(0.13 * vel * lc, t + att);
+    out.gain.setTargetAtTime(0.0001, t + att + hold, 0.55);
+  } else {                                                       // drum: a tuned thump
+    let fd = f; while (fd > 120) fd /= 2; while (fd < 48) fd *= 2;
+    const end = t + 0.7;
+    const o = ac.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(fd * 3, t); o.frequency.exponentialRampToValueAtTime(fd, t + 0.07); o.start(t); o.stop(end);
+    const o2 = ac.createOscillator(); o2.type = 'triangle';
+    o2.frequency.setValueAtTime(fd * 6, t); o2.frequency.exponentialRampToValueAtTime(fd * 2, t + 0.05); o2.start(t); o2.stop(end);
+    const g2 = ac.createGain(); g2.gain.setValueAtTime(0.22, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    const n = ac.createBufferSource(); n.buffer = noiseBuf;
+    const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2200;
+    const ng = ac.createGain(); ng.gain.setValueAtTime(0.12, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+    n.connect(hp); hp.connect(ng); ng.connect(out); n.start(t); n.stop(t + 0.05);
+    o.connect(out); o2.connect(g2); g2.connect(out);
+    out.gain.setValueAtTime(0.0001, t); out.gain.linearRampToValueAtTime(0.5 * vel, t + 0.003);
+    out.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+  }
+}
+function gong(vel) {                                             // the star itself
+  if (!audioLive()) return;
+  const t = ac.currentTime + 0.01, f = mtof(baseMidi() - 24), end = t + 6;
+  const out = ac.createGain(); out.connect(bus.breath);
+  const car = osc('sine', f * 2, t, end), mod = osc('sine', f * 2 * 1.41, t, end), mg = ac.createGain();
+  mg.gain.setValueAtTime(f * 5 * vel, t); mg.gain.exponentialRampToValueAtTime(f * 0.1, t + 3);
+  mod.connect(mg); mg.connect(car.frequency); car.connect(out);
+  const low = osc('sine', f, t, end); low.connect(out);
+  out.gain.setValueAtTime(0.0001, t); out.gain.linearRampToValueAtTime(0.3 * vel, t + 0.01);
+  out.gain.exponentialRampToValueAtTime(0.0001, t + 5.5);
+}
+function blip() {
+  if (!audioLive()) return;
+  const t = ac.currentTime + 0.005, o = ac.createOscillator(), g = ac.createGain();
+  o.frequency.setValueAtTime(1300, t); o.frequency.exponentialRampToValueAtTime(420, t + 0.09);
+  g.gain.setValueAtTime(0.09, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+  o.connect(g); g.connect(bus.pluck); o.start(t); o.stop(t + 0.12);
+}
+function setSound(on) {
+  if (on) {
+    initAudio();
+    if (!ac) { $('listen').textContent = 'No audio here'; return; }
+    if (ac.state !== 'running') ac.resume().catch(() => {});
+    master.gain.setTargetAtTime(0.85, ac.currentTime, 0.03);
+  } else if (ac) {
+    master.gain.setTargetAtTime(0, ac.currentTime, 0.03);
+  }
+  soundOn = on;
+  const b = $('listen'); b.textContent = on ? 'Sound on' : 'Muted'; b.setAttribute('aria-pressed', String(on));
+}
+
+/* ───────────── triggering ───────────── */
+function trigger(p, tb, vel) {
+  const d = degOf(p.w), peri = vel === 1;
+  const m = midiOf(d, p.T) - (peri ? 0 : 12);                   // aphelion answers an octave lower
+  playNote(p.voice, mtof(m), (tb - beatPos) / bps, vel, p.T / bps);
+  if (peri) p.flash = tb;
+  const ang = peri ? p.w : p.w + Math.PI, rr = peri ? p.a * (1 - p.e) : p.a * (1 + p.e);
+  events.push({ tb, x: rr * Math.cos(ang), y: rr * Math.sin(ang), deg: d, vel, str: peri ? p.w : null });
+}
+function schedule() {
+  const horizon = beatPos + 0.15 * bps;
+  for (const p of S.planets) {
+    let guard = 0;
+    while (p.tp + p.k * p.T < horizon && guard++ < 8) {
+      const tb = p.tp + p.k * p.T; if (tb > beatPos - 0.1) trigger(p, tb, 1); p.k++;
+    }
+    if (p.e >= 0.25) {
+      guard = 0;
+      while (p.tp + (p.ka + 0.5) * p.T < horizon && guard++ < 8) {
+        const tb = p.tp + (p.ka + 0.5) * p.T; if (tb > beatPos - 0.1) trigger(p, tb, 0.42); p.ka++;
+      }
+    }
+  }
+}
+
+/* ───────────── comets and sun-divers ───────────── */
+function launchBody(o, kind) {
+  bodies.push({ x: o.x, y: o.y, vx: o.vx, vy: o.vy, kind, tail: [], age: 0, pr: Math.hypot(o.x, o.y) });
+}
+function stepBodies(dtBeats) {
+  const sub = Math.max(1, Math.ceil(dtBeats / 0.006)), h = dtBeats / sub;
+  for (const b of bodies) {
+    for (let i = 0; i < sub && !b.dead; i++) {
+      let r = Math.hypot(b.x, b.y), k = -MU / (r * r * r);
+      b.vx += b.x * k * h / 2; b.vy += b.y * k * h / 2;
+      b.x += b.vx * h; b.y += b.vy * h;
+      r = Math.hypot(b.x, b.y); k = -MU / (r * r * r);
+      b.vx += b.x * k * h / 2; b.vy += b.y * k * h / 2;
+      if (S.lock || b.kind === 'comet') {                        // a passing body strums each ring it crosses
+        for (const T of RINGS) {
+          const ar = aFromT(T);
+          if ((b.pr - ar) * (r - ar) < 0) {
+            const d = degOf(Math.atan2(b.y, b.x));
+            playNote('bell', mtof(midiOf(d, T)), 0, 0.5);
+            events.push({ tb: beatPos, x: b.x, y: b.y, deg: d, vel: 0.6, str: null });
+          }
+        }
+      }
+      b.pr = r;
+      if (r < SUN_R) { b.dead = true; sunFlash = 1; gong(1); }
+      else if (r > 4) b.dead = true;
+    }
+    b.age += dtBeats;
+    if (b.age > 90) b.dead = true;
+    b.tail.push(b.x, b.y); if (b.tail.length > 90) b.tail.splice(0, 2);
+  }
+  bodies = bodies.filter(b => !b.dead);
+}
+
+/* ───────────── systems ───────────── */
+const SYSTEMS = {
+  harmonices: {
+    scale: 'penta', root: 2, lock: true, worlds: [
+      { T: 16,  deg: 0, ph: 0,    voice: 'breath' },
+      { T: 12,  deg: 3, ph: 6,    voice: 'breath' },
+      { T: 4,   deg: 0, ph: 0,    voice: 'drum' },
+      { T: 8,   deg: 3, ph: 6.5,  voice: 'drum' },
+      { T: 3,   deg: 2, ph: 0,    voice: 'pluck' },
+      { T: 6,   deg: 4, ph: 1.5,  voice: 'pluck', e: 0.35 },
+      { T: 2,   deg: 1, ph: 1,    voice: 'bell' },
+      { T: 1.5, deg: 3, ph: 0.75, voice: 'bell' },
+      { T: 8,   deg: 2, ph: 4,    voice: 'bell', e: 0.5 },
+    ] },
+  /* TRAPPIST-1 b–h. Periods in days: 1.511, 2.422, 4.050, 6.100, 9.207, 12.353, 18.767; here b = 1¼ beats. */
+  trappist: {
+    scale: 'dorian', root: 2, lock: false, worlds: [
+      { T: 1.25,   deg: 2, ph: 0.2, voice: 'bell' },
+      { T: 2.0037, deg: 4, ph: 1.1, voice: 'bell' },
+      { T: 3.3504, deg: 1, ph: 2.3, voice: 'pluck' },
+      { T: 5.0465, deg: 6, ph: 0.7, voice: 'pluck' },
+      { T: 7.6171, deg: 2, ph: 4.0, voice: 'pluck' },
+      { T: 10.220, deg: 4, ph: 6.2, voice: 'breath' },
+      { T: 15.527, deg: 0, ph: 0.0, voice: 'breath' },
+    ] },
+  /* Mercury, Venus, Earth, Mars, Vesta, Ceres: true period ratios (Mercury = 0.8 beat), eccentricities and
+     longitudes of perihelion, so each note is set by where the real perihelion points. */
+  sol: {
+    scale: 'penta', root: 2, lock: false, worlds: [
+      { T: 0.8,    lon: 77.46,  e: 0.2056, ph: 0.3, voice: 'bell' },
+      { T: 2.0435, lon: 131.5,  e: 0.0068, ph: 1.2, voice: 'bell' },
+      { T: 3.3218, lon: 102.9,  e: 0.0167, ph: 0.0, voice: 'pluck' },
+      { T: 6.2478, lon: 336.0,  e: 0.0934, ph: 2.5, voice: 'pluck' },
+      { T: 12.060, lon: 255.0,  e: 0.0890, ph: 7.0, voice: 'breath' },
+      { T: 15.300, lon: 153.9,  e: 0.0785, ph: 3.0, voice: 'drum' },
+    ] },
+  empty: { worlds: [] },
+};
+function loadSystem(name) {
+  const sys = SYSTEMS[name]; if (!sys) return;
+  S.system = name;
+  if (sys.scale) S.scale = sys.scale;
+  if (sys.root != null) S.root = sys.root;
+  if (sys.lock != null) S.lock = sys.lock;
+  S.planets = []; bodies = [];
+  const base = Math.ceil(beatPos / 4) * 4 - 96;
+  for (const wd of sys.worlds) {
+    const w = wd.lon != null ? -wd.lon * Math.PI / 180 : degAngle(wd.deg);
+    const p = { id: ++uid, a: aFromT(wd.T), e: wd.e || 0, w, dir: -1, T: wd.T, voice: wd.voice, born: beatPos - 9, bornAt: performance.now(), dM: 0, flash: -99, tp: base + wd.ph };
+    resetCounters(p); S.planets.push(p);
+  }
+  syncControls(); renderPlate(); save();
+}
+function genesis() {
+  const plan = [
+    { T: pick([16, 12]), voice: 'breath' },
+    { T: pick([4, 8, 2]), voice: 'drum' },
+    { T: pick([3, 6]), voice: 'pluck' },
+    { T: pick([4, 8, 6]), voice: 'pluck', e: Math.random() < 0.5 ? 0.3 + Math.random() * 0.2 : 0 },
+    { T: pick([1.5, 2, 3]), voice: 'bell' },
+    { T: pick([1, 2, 1.5]), voice: 'bell' },
+  ];
+  if (Math.random() < 0.7) plan.push({ T: pick([8, 6]), voice: 'bell', e: 0.3 + Math.random() * 0.25 });
+  if (Math.random() < 0.5) plan.push({ T: pick([12, 16, 8]), voice: pick(['breath', 'drum']) });
+  if (Math.random() < 0.4) plan.push({ T: pick([3, 4]), voice: 'pluck' });
+  S.planets = []; bodies = [];
+  const n = steps().length, base = Math.ceil(beatPos / 4) * 4 - 96;
+  plan.forEach((wd, i) => {
+    const T = S.lock ? wd.T : wd.T * (0.95 + Math.random() * 0.1);
+    const w = degAngle(Math.floor(Math.random() * n)) + (Math.random() - 0.5) * secW() * 0.5;
+    const p = { id: ++uid, a: aFromT(T), e: wd.e || 0, w, dir: Math.random() < 0.15 ? 1 : -1, T, voice: wd.voice, born: beatPos, bornAt: performance.now() + i * 90, dM: 0, flash: -99, tp: base + Math.floor(Math.random() * T * 2) / 2 };
+    resetCounters(p); S.planets.push(p);
+  });
+  sunFlash = 0.7; gong(0.5); save();
+}
+function relock() {                               // pull every free orbit onto the nearest resonance
+  for (const p of S.planets) {
+    const ph = frac((beatPos - p.tp) / p.T);
+    p.T = snapT(p.T); p.a = aFromT(p.T); p.e = Math.min(p.e, 1 - SUN_R * 1.2 / p.a);
+    p.tp = Math.round((beatPos - ph * p.T) / GRID) * GRID; p.dM = 0;
+    resetCounters(p);
+  }
+}
+
+/* ───────────── persistence ───────────── */
+function serialize() {
+  return {
+    scale: S.scale, root: S.root, mass: S.mass, lock: S.lock, voice: S.voice, system: S.system, beat: beatPos % 48,
+    worlds: S.planets.map(p => ({ a: p.a, e: p.e, w: p.w, dir: p.dir, T: p.T, voice: p.voice, tr: (p.tp - beatPos) % (p.T * 96) })),
+  };
+}
+function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(serialize())); } catch (err) { /* storage is optional */ } }
+function restore(d) {
+  if (!d || !Array.isArray(d.worlds)) return false;
+  if (SCALES[d.scale]) S.scale = d.scale;
+  if (Number.isInteger(d.root)) S.root = clamp(d.root, 0, 11);
+  if (typeof d.mass === 'number') S.mass = clamp(d.mass, 0.4, 2.2);
+  S.lock = d.lock !== false;
+  if (VOICES.includes(d.voice)) S.voice = d.voice;
+  if (SYSTEMS[d.system]) S.system = d.system;
+  beatPos = 48 + (typeof d.beat === 'number' ? d.beat : 0);
+  S.planets = [];
+  for (const wd of d.worlds.slice(0, MAX_WORLDS)) {
+    if (!(wd.T > 0.2 && wd.a > 0 && wd.e >= 0 && wd.e < 1) || !VOICES.includes(wd.voice)) continue;
+    const p = { id: ++uid, a: wd.a, e: wd.e, w: +wd.w || 0, dir: wd.dir === 1 ? 1 : -1, T: wd.T, voice: wd.voice, born: beatPos - 9, bornAt: 0, dM: 0, flash: -99, tp: beatPos + (+wd.tr || 0) };
+    resetCounters(p); S.planets.push(p);
+  }
+  return true;
+}
+
+/* ───────────── drawing: the static plate ───────────── */
+function mulberry(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function resize() {
+  const r = stage.getBoundingClientRect();
+  W = Math.max(50, r.width); H = Math.max(50, r.height); dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = plate.width = Math.round(W * dpr); cv.height = plate.height = Math.round(H * dpr);
+  cx = W / 2; cy = H / 2;
+  const rimBand = W < 520 ? 20 : 26;
+  R = Math.max(50, (Math.min(W, H) / 2 - rimBand - 10) / RIM);
+  gs = clamp(R / 250, 0.78, 1.35);
+  renderPlate();
+}
+function rimRadii() { const r1 = R * RIM, band = W < 520 ? 20 : 26; return [r1, r1 + band]; }
+function renderPlate() {
+  const c = pctx; c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const g = c.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.62);
+  g.addColorStop(0, '#163e6b'); g.addColorStop(0.55, '#102d50'); g.addColorStop(1, '#0a1f37');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+
+  const rnd = mulberry(1619), count = Math.round(W * H / 2400);          // the fixed stars
+  for (let i = 0; i < count; i++) {
+    const x = rnd() * W, y = rnd() * H, m = rnd();
+    if (m > 0.965) {
+      c.strokeStyle = rgba(IV, 0.55); c.lineWidth = 0.7; const s = 2.6 + rnd() * 2;
+      c.beginPath(); c.moveTo(x - s, y); c.lineTo(x + s, y); c.moveTo(x, y - s); c.lineTo(x, y + s); c.stroke();
+    } else {
+      c.fillStyle = rgba(IV, 0.1 + m * 0.42); c.beginPath(); c.arc(x, y, 0.45 + m * 0.75, 0, TAU); c.fill();
+    }
+  }
+
+  const n = steps().length, sw = TAU / n, [r1, r2] = rimRadii();
+  c.strokeStyle = rgba(IV, 0.06); c.lineWidth = 1;                        // sector boundaries
+  for (let d = 0; d < n; d++) {
+    const a = degAngle(d) + sw / 2;
+    c.beginPath(); c.moveTo(cx + Math.cos(a) * R * 0.11, cy + Math.sin(a) * R * 0.11); c.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); c.stroke();
+  }
+
+  c.setLineDash([2, 5]); let lastLab = -99;                               // resonance rings
+  const la = degAngle(0) + sw / 2;
+  for (const T of RINGS) {
+    const rr = aFromT(T) * R;
+    c.strokeStyle = rgba(IV, S.lock ? 0.2 : 0.09); c.beginPath(); c.arc(cx, cy, rr, 0, TAU); c.stroke();
+  }
+  c.setLineDash([]);
+  c.font = `${W < 520 ? 9 : 10}px "Spline Sans Mono", ui-monospace, monospace`; c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (const T of RINGS) {
+    const rr = aFromT(T) * R; if (rr - lastLab < 13) continue; lastLab = rr;
+    const x = cx + Math.cos(la) * rr, y = cy + Math.sin(la) * rr;
+    c.fillStyle = '#12335a'; c.beginPath(); c.arc(x, y, 8, 0, TAU); c.fill();
+    c.fillStyle = rgba(IV, S.lock ? 0.6 : 0.3); c.fillText(RING_LABEL[T], x, y + 0.5);
+  }
+
+  c.strokeStyle = rgba(IV, 0.5); c.lineWidth = 1;                         // the note rim, graduated like an astrolabe limb
+  c.beginPath(); c.arc(cx, cy, r1, 0, TAU); c.stroke();
+  c.beginPath(); c.arc(cx, cy, r2, 0, TAU); c.stroke();
+  c.strokeStyle = rgba(IV, 0.22); c.beginPath(); c.arc(cx, cy, r2 + 3.5, 0, TAU); c.stroke();
+  c.strokeStyle = rgba(IV, 0.34);
+  for (let i = 0; i < 180; i++) {
+    const a = i * TAU / 180, len = i % 5 === 0 ? 6 : 3;
+    c.beginPath(); c.moveTo(cx + Math.cos(a) * (r1 - len), cy + Math.sin(a) * (r1 - len)); c.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); c.stroke();
+  }
+  c.strokeStyle = rgba(IV, 0.5);
+  for (let d = 0; d < n; d++) {
+    const a = degAngle(d) + sw / 2;
+    c.beginPath(); c.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); c.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); c.stroke();
+  }
+  c.font = `italic ${W < 520 ? 14 : 17}px "IM Fell English", Georgia, serif`;
+  for (let d = 0; d < n; d++) {
+    const a = degAngle(d), rm = (r1 + r2) / 2;
+    c.save(); c.translate(cx + Math.cos(a) * rm, cy + Math.sin(a) * rm);
+    c.rotate(a + Math.PI / 2 + (Math.sin(a) > 0.3 ? Math.PI : 0));
+    c.fillStyle = rgba(COL[d % 7], 0.92); c.fillText(NOTE_NAMES[(S.root + steps()[d]) % 12], 0, 1);
+    c.restore();
+  }
+}
+
+/* ───────────── drawing: each frame ───────────── */
+function label(text, x, y) {
+  ctx.font = '11px "Spline Sans Mono", ui-monospace, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 16, h = 24;
+  x = clamp(x, 6, W - w - 6); y = clamp(y, 6, H - h - 6);
+  ctx.fillStyle = rgba(INK, 0.9); ctx.strokeStyle = rgba(IV, 0.35); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.rect(Math.round(x) + 0.5, Math.round(y) + 0.5, w, h); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = rgba(IV, 0.95); ctx.fillText(text, x + 8, y + h / 2 + 1);
+}
+function orbitPath(el) {
+  const b = el.a * Math.sqrt(1 - el.e * el.e);
+  ctx.beginPath();
+  ctx.ellipse(cx - el.a * el.e * Math.cos(el.w) * R, cy - el.a * el.e * Math.sin(el.w) * R, el.a * R, b * R, el.w, 0, TAU);
+}
+function glyph(voice, x, y, rad, c, alpha) {
+  ctx.fillStyle = rgba(c, alpha); ctx.strokeStyle = rgba(c, alpha);
+  if (voice === 'bell') { ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.fill(); }
+  else if (voice === 'pluck') {
+    ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y, rad * 1.1, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y, rad * 0.36, 0, TAU); ctx.fill();
+  } else if (voice === 'breath') {
+    ctx.fillStyle = rgba(c, alpha * 0.28); ctx.beginPath(); ctx.arc(x, y, rad * 1.9, 0, TAU); ctx.fill();
+    ctx.fillStyle = rgba(c, alpha); ctx.beginPath(); ctx.arc(x, y, rad * 0.8, 0, TAU); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(x, y, rad * 0.82, 0, TAU); ctx.fill();
+    ctx.lineWidth = 1.2; ctx.beginPath(); ctx.ellipse(x, y, rad * 2, rad * 0.7, -0.4, 0, TAU); ctx.stroke();
+  }
+}
+function planetRadius(p) { return (4.7 - octOf(p.T) * 0.85) * gs; }
+
+function draw(now) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(plate, 0, 0);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const [r1, r2] = rimRadii(), sw = secW();
+
+  /* rim keys light as their notes sound */
+  for (const ev of events) {
+    const age = (beatPos - ev.tb) / bps;
+    if (age < 0 || age > 0.55 || ev.deg < 0) continue;
+    const a = degAngle(ev.deg), k = 1 - age / 0.55;
+    ctx.fillStyle = rgba(COL[ev.deg % 7], 0.36 * ev.vel * k * k);
+    ctx.beginPath(); ctx.arc(cx, cy, r2, a - sw / 2, a + sw / 2); ctx.arc(cx, cy, r1, a + sw / 2, a - sw / 2, true); ctx.closePath(); ctx.fill();
+  }
+
+  /* orbits */
+  for (const p of S.planets) {
+    const c = COL[degOf(p.w) % 7], age = (beatPos - p.flash) / bps, fl = age < 0 ? 0 : Math.exp(-age * 4);
+    ctx.strokeStyle = rgba(c, 0.26 + 0.5 * fl); ctx.lineWidth = 1 + fl * 0.8;
+    orbitPath(p); ctx.stroke();
+    const px = cx + p.a * (1 - p.e) * Math.cos(p.w) * R, py = cy + p.a * (1 - p.e) * Math.sin(p.w) * R;   // perihelion tick
+    ctx.strokeStyle = rgba(c, 0.8); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(px - Math.cos(p.w) * 5, py - Math.sin(p.w) * 5); ctx.lineTo(px + Math.cos(p.w) * 5, py + Math.sin(p.w) * 5); ctx.stroke();
+    if (p.e >= 0.25) {
+      ctx.fillStyle = rgba(c, 0.6); ctx.beginPath();
+      ctx.arc(cx - p.a * (1 + p.e) * Math.cos(p.w) * R, cy - p.a * (1 + p.e) * Math.sin(p.w) * R, 1.8, 0, TAU); ctx.fill();
+    }
+  }
+
+  /* plucked strings and ripples */
+  for (const ev of events) {
+    const age = (beatPos - ev.tb) / bps; if (age < 0) continue;
+    const c = ev.deg < 0 ? IV : COL[ev.deg % 7];
+    if (ev.str != null && age < 0.8) {
+      const a = ev.str, k = Math.exp(-age * 5), wob = REDUCED ? 0 : 7 * gs * k * Math.sin(age * 58);
+      const x2 = cx + Math.cos(a) * r1, y2 = cy + Math.sin(a) * r1;
+      ctx.strokeStyle = rgba(c, 0.6 * k); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.quadraticCurveTo((cx + x2) / 2 - Math.sin(a) * wob * 2, (cy + y2) / 2 + Math.cos(a) * wob * 2, x2, y2); ctx.stroke();
+    }
+    if (age < 1) {
+      const k = 1 - age;
+      ctx.strokeStyle = rgba(c, 0.75 * ev.vel * k * k); ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(cx + ev.x * R, cy + ev.y * R, (5 + 46 * age * (0.5 + ev.vel * 0.5)) * gs, 0, TAU); ctx.stroke();
+    }
+  }
+  if (events.length) events = events.filter(ev => (beatPos - ev.tb) / bps < 1.1);
+
+  /* the star */
+  const beatPulse = Math.exp(-frac(beatPos) * 5) * (Math.floor(beatPos) % 4 === 0 ? 1 : 0.4);
+  const sr = SUN_R * R * 0.8, glowR = sr * (4.5 + beatPulse * 1.2 + sunFlash * 9);
+  ctx.globalCompositeOperation = 'lighter';
+  let sg = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+  sg.addColorStop(0, `rgba(248,224,150,${0.55 + sunFlash * 0.4})`); sg.addColorStop(0.35, 'rgba(232,195,106,.16)'); sg.addColorStop(1, 'rgba(232,195,106,0)');
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(cx, cy, glowR, 0, TAU); ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = 'rgba(248,232,180,.85)'; ctx.lineWidth = 1;
+  const rot = REDUCED ? 0 : beatPos * 0.015;
+  for (let i = 0; i < 24; i++) {
+    const a = rot + i * TAU / 24, len = (i % 2 ? 1.75 : 2.35) + beatPulse * 0.5 + sunFlash * 2.5;
+    ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * sr * 1.3, cy + Math.sin(a) * sr * 1.3); ctx.lineTo(cx + Math.cos(a) * sr * len, cy + Math.sin(a) * sr * len); ctx.stroke();
+  }
+  ctx.fillStyle = '#fbefc4'; ctx.beginPath(); ctx.arc(cx, cy, sr, 0, TAU); ctx.fill();
+
+  /* worlds */
+  let nearest = null, nd = 1e9;
+  for (const p of S.planets) {
+    const c = COL[degOf(p.w) % 7], pos = posAt(p, beatPos), px = cx + pos[0] * R, py = cy + pos[1] * R;
+    p.px = px; p.py = py;
+    const grow = clamp((now - p.bornAt) / 320, 0, 1), rad = planetRadius(p) * (0.3 + 0.7 * grow);
+    if (grow <= 0) continue;
+    const age = (beatPos - p.flash) / bps, fl = age < 0 ? 0 : Math.exp(-age * 5);
+    const span = Math.min(p.T * 0.14, 1) * (REDUCED ? 0.4 : 1), nseg = 16;
+    let lx = px, ly = py; ctx.lineCap = 'round';
+    for (let i = 1; i <= nseg; i++) {
+      const tp = posAt(p, beatPos - span * i / nseg), tx = cx + tp[0] * R, ty = cy + tp[1] * R, k = 1 - i / nseg;
+      ctx.strokeStyle = rgba(c, 0.5 * k * grow); ctx.lineWidth = rad * 1.1 * k + 0.5;
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(tx, ty); ctx.stroke(); lx = tx; ly = ty;
+    }
+    ctx.lineCap = 'butt';
+    ctx.globalCompositeOperation = 'lighter';
+    const gr = rad * (3.2 + fl * 4.5), gg = ctx.createRadialGradient(px, py, 0, px, py, gr);
+    gg.addColorStop(0, rgba(c, 0.3 + 0.5 * fl)); gg.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(px, py, gr, 0, TAU); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    glyph(p.voice, px, py, rad * (1 + fl * 0.35), c, 1);
+    if (hover) { const d = Math.hypot(px - hover.x, py - hover.y); if (d < nd) { nd = d; nearest = p; } }
+  }
+
+  /* comets and sun-divers */
+  for (const b of bodies) {
+    const tl = b.tail, m = tl.length / 2;
+    ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    for (let i = 1; i < m; i++) {
+      const k = i / m;
+      ctx.strokeStyle = rgba(IV, 0.55 * k * k); ctx.lineWidth = 0.6 + 2.6 * k * gs;
+      ctx.beginPath(); ctx.moveTo(cx + tl[i * 2 - 2] * R, cy + tl[i * 2 - 1] * R); ctx.lineTo(cx + tl[i * 2] * R, cy + tl[i * 2 + 1] * R); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over'; ctx.lineCap = 'butt';
+    ctx.fillStyle = '#fff8e2'; ctx.beginPath(); ctx.arc(cx + b.x * R, cy + b.y * R, 2.6 * gs, 0, TAU); ctx.fill();
+  }
+
+  /* gesture preview */
+  if (gesture && gesture.moved) {
+    const o = outcome(gesture);
+    ctx.strokeStyle = rgba(IV, 0.8); ctx.lineWidth = 1.2;
+    const ang = Math.atan2(gesture.y - gesture.y0, gesture.x - gesture.x0);
+    ctx.beginPath(); ctx.moveTo(gesture.x0, gesture.y0); ctx.lineTo(gesture.x, gesture.y);
+    ctx.moveTo(gesture.x, gesture.y); ctx.lineTo(gesture.x - Math.cos(ang - 0.45) * 8, gesture.y - Math.sin(ang - 0.45) * 8);
+    ctx.moveTo(gesture.x, gesture.y); ctx.lineTo(gesture.x - Math.cos(ang + 0.45) * 8, gesture.y - Math.sin(ang + 0.45) * 8); ctx.stroke();
+    ctx.fillStyle = rgba(IV, 0.9); ctx.beginPath(); ctx.arc(gesture.x0, gesture.y0, 3, 0, TAU); ctx.fill();
+    let text = '';
+    if (o.kind === 'orbit') {
+      const el = o.el, d = degOf(el.w), c = COL[d % 7], a = degAngle(d);
+      ctx.fillStyle = rgba(c, 0.3);
+      ctx.beginPath(); ctx.arc(cx, cy, r2, a - sw / 2, a + sw / 2); ctx.arc(cx, cy, r1, a + sw / 2, a - sw / 2, true); ctx.closePath(); ctx.fill();
+      ctx.setLineDash([5, 5]); ctx.strokeStyle = rgba(c, 0.95); ctx.lineWidth = 1.3; orbitPath(el); ctx.stroke(); ctx.setLineDash([]);
+      const qx = cx + el.a * (1 - el.e) * Math.cos(el.w) * R, qy = cy + el.a * (1 - el.e) * Math.sin(el.w) * R;
+      ctx.fillStyle = rgba(c, 1); ctx.beginPath(); ctx.arc(qx, qy, 3.2, 0, TAU); ctx.fill();
+      text = `${noteName(midiOf(d, el.T))} · every ${fmtBeats(el.T)} beats · e ${el.e.toFixed(2)}`;
+    } else if (o.kind === 'comet') text = 'a comet: it will strum the rings and not return';
+    else if (o.kind === 'dive') text = 'too slow: it will fall into the star';
+    if (text) label(text, gesture.x0 + 14, gesture.y0 - 38);
+  } else if (hover && nearest && nd < 18) {
+    const p = nearest, d = degOf(p.w);
+    label(`${noteName(midiOf(d, p.T))} · ${p.voice} · every ${fmtBeats(p.T)} beats · e ${p.e.toFixed(2)} · click to remove`, hover.x + 14, hover.y - 34);
+    cv.style.cursor = 'pointer';
+  } else if (hover) cv.style.cursor = 'crosshair';
+}
+
+/* ───────────── the clock ───────────── */
+let last = performance.now();
+function frame() {
+  requestAnimationFrame(frame);
+  const now = performance.now(), dt = Math.min((now - last) / 1000, 0.1); last = now;
+  beatPos += dt * bps;
+  sunFlash *= Math.exp(-dt * 2.4);
+  schedule();
+  if (bodies.length) stepBodies(dt * bps);
+  draw(now);
+}
+
+/* ───────────── input ───────────── */
+function ptr(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+function hitPlanet(x, y, reach) {
+  let best = null, bd = reach;
+  for (const p of S.planets) { const d = Math.hypot((p.px || -999) - x, (p.py || -999) - y); if (d < bd) { bd = d; best = p; } }
+  return best;
+}
+cv.addEventListener('pointerdown', e => {
+  if (e.button > 0) return;
+  if (!soundOn && !ac) setSound(true); else if (ac && ac.state !== 'running' && soundOn) ac.resume().catch(() => {});
+  const [x, y] = ptr(e);
+  gesture = { id: e.pointerId, x0: x, y0: y, x, y, moved: false, hit: hitPlanet(x, y, e.pointerType === 'mouse' ? 16 : 24) };
+  try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  e.preventDefault();
+});
+cv.addEventListener('pointermove', e => {
+  const [x, y] = ptr(e);
+  if (gesture && e.pointerId === gesture.id) {
+    gesture.x = x; gesture.y = y;
+    if (!gesture.moved && Math.hypot(x - gesture.x0, y - gesture.y0) > 9) gesture.moved = true;
+  } else if (e.pointerType === 'mouse') hover = { x, y };
+});
+cv.addEventListener('pointerleave', () => { hover = null; });
+cv.addEventListener('pointercancel', () => { gesture = null; });
+cv.addEventListener('pointerup', e => {
+  if (!gesture || e.pointerId !== gesture.id) return;
+  const g = gesture; gesture = null;
+  if (!g.moved && g.hit) { removePlanet(g.hit); afterChange(); return; }
+  const o = outcome(g);
+  if (o.kind === 'orbit') addPlanet(o.el, S.voice);
+  else if (o.kind === 'comet') launchBody(o, 'comet');
+  else if (o.kind === 'dive') launchBody(o, 'dive');
+  else if (o.kind === 'sun') { sunFlash = 0.8; gong(0.7); }
+  if (o.kind !== 'none') { hintCount++; afterChange(); }
+});
+
+function afterChange() {
+  updateStatus(); save();
+  if (hintCount === 3) $('hint').textContent = 'The angle picks the note, the distance sets the rhythm. A hard fling makes a comet.';
+  if (hintCount === 8) $('hint').textContent = '';
+}
+function lcm(a, b) { let x = a, y = b; while (y) [x, y] = [y, x % y]; return a / x * b; }
+function updateStatus() {
+  const n = S.planets.length; let text;
+  if (!n) text = 'An empty sky';
+  else {
+    let L = 1, exact = true;
+    for (const p of S.planets) { const t2 = p.T * 2; if (Math.abs(t2 - Math.round(t2)) > 1e-6) { exact = false; break; } L = lcm(L, Math.round(t2)); }
+    text = `${n} world${n > 1 ? 's' : ''} · ` + (exact ? `repeats every ${L / 2} beats` : 'drifting, never quite repeating');
+  }
+  $('status').textContent = text;
+}
+function syncControls() {
+  $('scale').value = S.scale; $('key').value = String(S.root); $('mass').value = String(S.mass); $('system').value = S.system;
+  bps = BASE_BPM * Math.sqrt(S.mass) / 60;
+  $('massOut').textContent = `${S.mass.toFixed(2)} M☉ · ${Math.round(bps * 60)} bpm`;
+  const lk = $('lock'); lk.setAttribute('aria-pressed', String(S.lock)); lk.textContent = S.lock ? 'In resonance' : 'Free';
+  for (const b of document.querySelectorAll('[data-voice]')) b.setAttribute('aria-pressed', String(b.dataset.voice === S.voice));
+  if (delayNode) delayNode.delayTime.setTargetAtTime(clamp(0.75 / bps, 0.05, 2.4), ac.currentTime, 0.1);
+  updateStatus();
+}
+
+/* ───────────── boot ───────────── */
+function start(data) {
+  for (const [k, v] of Object.entries(SCALES)) $('scale').add(new Option(`${v.name} (${v.steps.length} notes)`, k));
+  NOTE_NAMES.forEach((nm, i) => $('key').add(new Option(nm, String(i))));
+
+  let restored = false;
+  if (data && data.worlds) restored = restore(data);
+  if (!restored) { try { restored = restore(JSON.parse(localStorage.getItem(STORE_KEY) || 'null')); } catch (err) { restored = false; } }
+  if (!restored) { beatPos = 48; loadSystem('harmonices'); }
+
+  $('listen').addEventListener('click', () => setSound(!soundOn));
+  for (const b of document.querySelectorAll('[data-voice]')) b.addEventListener('click', () => {
+    S.voice = b.dataset.voice; syncControls(); save();
+    if (!soundOn && !ac) setSound(true);
+    playNote(S.voice, mtof(baseMidi() + (S.voice === 'drum' ? -12 : 0)), 0, 0.8, 2);
+  });
+  $('scale').addEventListener('change', e => { S.scale = e.target.value; renderPlate(); save(); });
+  $('key').addEventListener('change', e => { S.root = +e.target.value; renderPlate(); save(); });
+  $('mass').addEventListener('input', e => { S.mass = +e.target.value; syncControls(); save(); });
+  $('lock').addEventListener('click', () => { S.lock = !S.lock; if (S.lock) relock(); syncControls(); renderPlate(); save(); });
+  $('system').addEventListener('change', e => { loadSystem(e.target.value); sunFlash = 0.6; gong(0.4); });
+  $('genesis').addEventListener('click', () => { if (!soundOn && !ac) setSound(true); genesis(); updateStatus(); });
+  $('undo').addEventListener('click', () => { const p = S.planets[S.planets.length - 1]; if (p) { removePlanet(p); afterChange(); } });
+
+  syncControls();
+  resize();
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage); else window.addEventListener('resize', resize);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(renderPlate).catch(() => {});
+  document.addEventListener('visibilitychange', () => { last = performance.now(); if (!document.hidden) for (const p of S.planets) resetCounters(p); });
+  requestAnimationFrame(frame);
+}
+
+const hot = window.claude && window.claude.hot;
+if (hot && hot.snapshot) { try { hot.snapshot(() => serialize()); } catch (err) { /* optional */ } }
+if (hot && hot.ready) hot.ready(d => start(d || {})); else start((hot && hot.data) || {});
+})();
+</script>
+</body>
+</html>
